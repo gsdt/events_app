@@ -5,4 +5,4 @@ from django.utils import timezone
 import datetime
 
 e = Event(title='Big event', description='this is big description', location='Lotte', start=timezone.now(), end=timezone.now()+datetime.timedelta(days=1))
-e2 = Event(title='Big event', description='this is big description', location='Lotte', start=timezone.now(), end=timezone.now()+datetime.timedelta(days=-1))
+e2 = Event(title='Big event', description='this is big description', location='Lotte', start=timezone.now(), end=timezone.now()+datetime.timedelta(days=

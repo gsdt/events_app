@@ -22,23 +22,17 @@ class Event(models.Model):
         return self.title
 
 class Image(models.Model):
-    title = models.CharField(max_length=255, null=True)
-    main_image = models.ImageField(upload_to="images")
-    event = models.ForeignKey(Event, on_delete=models.CASCADE)
-    description = models.TextField(null=True)
+    image = models.ImageField(upload_to="images")
+    event = models.ForeignKey(Event, related_name='images', on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    def clean(self):
-        # default value for title
-        self.title = self.main_image.name
-
+    
     def __str__(self):
-        return title
+        return self.image.name
     
 
 class Category(models.Model):
     name = models.CharField(max_length=255)
-    events = models.ManyToManyField(Event)
+    events = models.ManyToManyField(Event, related_name='categories')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -51,33 +45,33 @@ class User(AbstractUser):
     updated_at = models.DateTimeField(auto_now=True)
 
 class Like(models.Model):
-    event = models.OneToOneField(Event, on_delete=models.CASCADE)
-    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    event = models.ForeignKey(Event, on_delete=models.CASCADE)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.name} liked {self.event}"
+        return f"{self.user} liked {self.event}"
 
     class Meta:
         unique_together = ('event', 'user')
     
 
 class Participate(models.Model):
-    event = models.OneToOneField(Event, on_delete=models.CASCADE)
-    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    event = models.ForeignKey(Event, on_delete=models.CASCADE)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.name} participated {self.event}"
+        return f"{self.user} participated {self.event}"
 
     class Meta:
         unique_together = ('event', 'user')
 
 class Comment(models.Model):
-    event = models.OneToOneField(Event, on_delete=models.CASCADE)
-    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='comments')
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
     content = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -88,7 +82,7 @@ class Comment(models.Model):
             raise ValidationError(_('Empty comment is not allowed.'))
 
     def __str__(self):
-        return f"{self.name} commented on {self.event}: {self.content}"
+        return f"{self.user} commented on {self.event}: {self.content}"
     
 
 
