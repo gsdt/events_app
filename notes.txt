@@ -6,3 +6,6 @@ import datetime
 
 e = Event(title='Big event', description='this is big description', location='Lotte', start=timezone.now(), end=timezone.now()+datetime.timedelta(days=1))
 e2 = Event(title='Big event', description='this is big description', location='Lotte', start=timezone.now(), end=timezone.now()+datetime.timedelta(days=
+
+
+https://accounts.google.com/signin/oauth/oauthchooseaccount?client_id=741430515032-cgjpg3m6tpn9c4s669efln9ejpm0tkht.apps.googleusercontent.com&as=cL2n02d9YRFQ8-tRSlsRig&destination=http%3A%2F%2F127.0.0.1%3A8000&approval_state=!ChQzMEU5RVpYX0pBczI2NjlBOFFaXxIfVXl3QndIc2h4MUlaOEhuU1JuY2dubXBlSURSOXN4WQ%E2%88%99AJDr988AAAAAXP0teNyHP8i2BcqlgWQkeJcqosdLpGGj&oauthgdpr=1&xsrfsig=ChkAeAh8T5cYu9hGf-QAXVzieVybknxSLmLjEg5hcHByb3ZhbF9zdGF0ZRILZGVzdGluYXRpb24SBXNvYWN1Eg9vYXV0aHJpc2t5c2NvcGU&flowName=GeneralOAuthFlow
