@@ -6,6 +6,7 @@ import operator
 from django.contrib.auth import authenticate
 from django.views.decorators.csrf import csrf_exempt
 from django.db.models import Q
+from django.utils.dateparse import parse_date
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated, IsAdminUser, DjangoObjectPermissions
@@ -52,18 +53,27 @@ class UserView(ModelViewSet):
                             status=HTTP_400_BAD_REQUEST)
         user = authenticate(username=username, password=password)
         if not user:
-            return Response({'message': 'Invalid Credentials'},
-                            status=HTTP_404_NOT_FOUND)
+            return Response(
+                {
+                    'message': 'Invalid Credentials'
+                },
+                status=HTTP_404_NOT_FOUND
+            )
         token, _ = Token.objects.get_or_create(user=user)
-        return Response({'token': token.key},
-            status=HTTP_200_OK)
+        return Response(
+            {
+                'token': token.key
+            },
+            status=HTTP_200_OK
+        )
 
     def logout(self, request):
         request.user.auth_token.delete()
         return Response(
             {
                 'message': 'Logout success'
-            },status=HTTP_200_OK)
+            },status=HTTP_200_OK
+        )
 
 class EventView(ModelViewSet):
     queryset = models.Event.objects.all().order_by('start')
@@ -125,7 +135,7 @@ class EventView(ModelViewSet):
         serializer = serializers.EventSerializer(new_event)
 
         return Response(
-            {'message': 'Created new event.', 'data' : serializer.data}, 
+            serializer.data, 
             status=HTTP_200_OK)
 
     def add_image(self, request, pk=None):
@@ -145,7 +155,9 @@ class EventView(ModelViewSet):
     def update(self, request, pk=None):
         event = self.get_object()
         event.categories.clear()
-        print(event.categories.all())
+
+        old_event = models.Event(start=event.start, end=event.end, location=event.location)
+
         # now we trying to add relationship with categories
         categories = [t.strip() for t in request.data.get('categories', '').split(',')]
         for cate_name in categories:
@@ -161,6 +173,19 @@ class EventView(ModelViewSet):
         serializer = self.get_serializer(event, data=request.data, partial=False)
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
+
+        # now we are sending email if location or time range changed.
+        try:
+            if old_event.start != event.start or old_event.end != event.end or old_event.location != event.location:
+                print("Datetime or location has changed!")
+                participants = models.Participate.objects.filter(event = event)
+                
+                helpers.SendEmailThread(participants, old_event, event, helpers.EVENT_CHANGE).start()
+
+        except expression as identifier:
+            print(identifier)
+            pass
+
         return Response(serializer.data, HTTP_200_OK)
 
     def comment(self, request, pk=None):
@@ -171,8 +196,13 @@ class EventView(ModelViewSet):
         comment = models.Comment(user = user, event=event, content=content)
         comment.save()
         return Response(
-            {'message': comment.__str__()},
-            status=HTTP_200_OK)
+        {
+            'action': 'comment',
+            'event': event.id,
+            'user': user.id,
+            'content': content
+        },
+        status=HTTP_200_OK)
 
     def like(self, request, pk=None):
         event = self.get_object()
@@ -182,13 +212,21 @@ class EventView(ModelViewSet):
             like = models.Like.objects.get(user=user, event=event)
             like.delete()
             return Response(
-                {'message': f"{user} unliked {event}"},
+                {
+                    'action': 'unlike',
+                    'event': event.id,
+                    'user': user.id
+                },
                 status=HTTP_200_OK)
         except models.Like.DoesNotExist as identifier:
             like = models.Like(user = user, event=event)
             like.save()
             return Response(
-                {'message': like.__str__()},
+                {
+                    'action': 'like',
+                    'event': event.id,
+                    'user': user.id
+                },
                 status=HTTP_200_OK)
 
     def participate(self, request, pk=None):
@@ -199,14 +237,22 @@ class EventView(ModelViewSet):
             participate = models.Participate.objects.get(user=user, event=event)
             participate.delete()
             return Response(
-                {'message': f"{user} leaved {event}"},
-                status=HTTP_200_OK)
+            {
+                'action': 'leave',
+                'event': event.id,
+                'user': user.id
+            },
+            status=HTTP_200_OK)
         except models.Participate.DoesNotExist as identifier:
             participate = models.Participate(user = user, event=event)
             participate.save()
             return Response(
-                {'message': participate.__str__()},
-                status=HTTP_200_OK)
+            {
+                'action': 'participate',
+                'event': event.id,
+                'user': user.id
+            },
+            status=HTTP_200_OK)
 
 class CommentView(ModelViewSet):
     serializer_class = serializers.CommentSerializer

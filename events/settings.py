@@ -46,6 +46,14 @@ INSTALLED_APPS = [
     'social_django'
 ]
 
+# email
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_USE_TLS = True
+EMAIL_PORT = 587
+EMAIL_HOST_USER = 'test.gsdt.01@gmail.com'
+EMAIL_HOST_PASSWORD = 'gsdtgsdt'
+
 AUTHENTICATION_BACKENDS = (
     'social_core.backends.open_id.OpenIdAuth',
     'social_core.backends.google.GoogleOpenId',
@@ -86,7 +94,7 @@ ROOT_URLCONF = 'events.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [BASE_DIR+"/templates/"],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
