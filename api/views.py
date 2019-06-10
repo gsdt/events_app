@@ -2,18 +2,22 @@ import uuid,os
 from . import helpers
 from functools import reduce
 import operator
+import requests
+import json
 
 from django.contrib.auth import authenticate
 from django.views.decorators.csrf import csrf_exempt
 from django.db.models import Q
 from django.utils.dateparse import parse_date
+from django.conf import settings
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated, IsAdminUser, DjangoObjectPermissions
 from rest_framework.status import (
     HTTP_400_BAD_REQUEST,
     HTTP_404_NOT_FOUND,
-    HTTP_200_OK
+    HTTP_200_OK,
+    HTTP_302_FOUND
 )
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
@@ -24,6 +28,7 @@ from api import models
 from api import serializers
 from api import permissions
 
+
 class UserView(ModelViewSet):
     queryset = models.User.objects.all().order_by('id')
     serializer_class = serializers.UserSerializer
@@ -31,7 +36,7 @@ class UserView(ModelViewSet):
     def get_permissions(self):
         permission_dict = {
             'list': [IsAdminUser],
-            'retrieve': [IsAdminUser],
+            'retrieve': [permissions.IsOwner],
             'create': [IsAdminUser],
             'update': [IsAdminUser],
             'partial_update': [IsAdminUser],
@@ -55,7 +60,7 @@ class UserView(ModelViewSet):
         if not user:
             return Response(
                 {
-                    'message': 'Invalid Credentials'
+                    'error': 'Invalid Credentials'
                 },
                 status=HTTP_404_NOT_FOUND
             )
@@ -334,5 +339,57 @@ class SearchView(ModelViewSet):
 
         # return response
         return Response(serializer.data)
+
+
+class GoogleSignInView(ModelViewSet):
+    permission_classes = [AllowAny]
+    #step 01: send auth request to google server
+    def auth(self, request):
+        google_oauth_server = f"https://accounts.google.com/o/oauth2/v2/auth?client_id={settings.SOCIAL_GOOGLE_CLIENT_ID}"
+        google_oauth_server += "&redirect_uri=http://127.0.0.1:8000/api/auth/callback"
+        google_oauth_server += "&scope=profile email openid&access_type=offline&prompt=consent"
+        google_oauth_server += "&response_type=code&include_granted_scopes=true"
+        return Response(headers={'Location': google_oauth_server},status=HTTP_302_FOUND)
+    
+    def callback(self, request):
+        # step 02: recieve code from google
+        data = {
+            'code': request.GET.get('code'),
+            'client_id': settings.SOCIAL_GOOGLE_CLIENT_ID,
+            'client_secret': settings.SOCIAL_GOOGLE_CLIENT_SECRET,
+            'grant_type': 'authorization_code',
+            'redirect_uri': 'http://127.0.0.1:8000/api/auth/callback',
+        }
+
+        google_token_server = "https://www.googleapis.com/oauth2/v4/token"
+        google_api_userinfo = "https://www.googleapis.com/oauth2/v2/userinfo"
+
+
+        # step 03: get tooken
+        response = requests.post(url=google_token_server, data=data)
+        response = json.loads(response.text)
+        if 'error_description' in response:
+            return Response(data=response, status=HTTP_400_BAD_REQUEST)
+        
+        # step 04: retrieve user email
+        headers = {
+            'Authorization' : f"Bearer {response['access_token']}"
+        }
+        response = requests.get(url=google_api_userinfo, headers=headers)
+        response = json.loads(response.text)
+        
+        # step 05: find and return user token
+        try:
+            user = models.User.objects.get(email=response['email'])
+            token, _ = Token.objects.get_or_create(user=user)
+            return Response(
+                {
+                    'token': token.key
+                },
+                status=HTTP_200_OK
+            )
+        except models.User.DoesNotExist:
+            return Response(data={'error': 'user not found'}, status=HTTP_404_NOT_FOUND)
+
 
             

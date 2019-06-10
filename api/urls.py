@@ -64,5 +64,10 @@ urlpatterns = [
     )),
 
     # google sign in
-    path('social/', include('social_django.urls'))
+    path('auth/', views.GoogleSignInView.as_view(
+        {'get': 'auth'}
+    )),
+    path('auth/callback', views.GoogleSignInView.as_view(
+        {'get': 'callback'}
+    ))
 ]
