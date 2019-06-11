@@ -23,6 +23,11 @@ class Event(CommonInfo):
     def __str__(self):
         return self.title
 
+    class Meta:
+        index_together = [
+            ('start', 'end')
+        ]
+
 class Image(CommonInfo):
     image = models.ImageField(upload_to="images")
     event = models.ForeignKey(Event, related_name='images', on_delete=models.CASCADE)
@@ -45,7 +50,7 @@ class User(AbstractUser):
         # unique
 
 class Like(CommonInfo):
-    event = models.ForeignKey(Event, on_delete=models.CASCADE)
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='likes')
     user = models.ForeignKey(User, on_delete=models.CASCADE)
 
     def __str__(self):
@@ -57,7 +62,7 @@ class Like(CommonInfo):
 
 class Participate(CommonInfo):
     event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='participants')
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='events_participated')
 
     def __str__(self):
         return f"{self.user} participated {self.event}"
@@ -72,6 +77,11 @@ class Comment(CommonInfo):
 
     def __str__(self):
         return f"{self.user} commented on {self.event}: {self.content}"
+
+    class Meta:
+        index_together = [
+            ('event', 'user')
+        ]
     
 
 

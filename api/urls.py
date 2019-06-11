@@ -32,8 +32,14 @@ urlpatterns = [
         }
     )),
     path('event/<pk>/like', views.EventView.as_view({'put': 'like'})),
+    path('event/<pk>/likes', views.EventView.as_view({'get': 'likes_list'})),
+
     path('event/<pk>/participate', views.EventView.as_view({'put': 'participate'})),
+    path('event/<pk>/participants', views.EventView.as_view({'get': 'participants_list'})),
+
     path('event/<pk>/comment', views.EventView.as_view({'post': 'comment'})),
+    path('event/<pk>/comments', views.EventView.as_view({'get': 'comments_list'})),
+
 
     # comment
     path('comment/<pk>', views.CommentView.as_view(

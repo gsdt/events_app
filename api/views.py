@@ -1,14 +1,14 @@
 import uuid,os
 from . import helpers
-from functools import reduce
 import operator
 import requests
 import json
+from dateutil.parser import parse as datetime_parse
+from collections import OrderedDict
 
 from django.contrib.auth import authenticate
 from django.views.decorators.csrf import csrf_exempt
 from django.db.models import Q
-from django.utils.dateparse import parse_date
 from django.conf import settings
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import api_view, permission_classes
@@ -24,10 +24,25 @@ from rest_framework.viewsets import ModelViewSet
 from rest_framework.decorators import action
 from rest_framework import filters
 from rest_framework.pagination import PageNumberPagination
+
+from rest_framework_jwt.settings import api_settings
+
 from api import models
 from api import serializers
 from api import permissions
 
+def gen_token_response(user):
+    jwt_payload_handler = api_settings.JWT_PAYLOAD_HANDLER
+    jwt_encode_handler = api_settings.JWT_ENCODE_HANDLER
+
+    payload = jwt_payload_handler(user)
+    token = jwt_encode_handler(payload)
+    return OrderedDict(
+        user=serializers.UserSerializer(user).data,
+        token=token,
+        expired=api_settings.JWT_EXPIRATION_DELTA,
+        type=api_settings.JWT_AUTH_HEADER_PREFIX
+    )
 
 class UserView(ModelViewSet):
     queryset = models.User.objects.all().order_by('id')
@@ -64,13 +79,9 @@ class UserView(ModelViewSet):
                 },
                 status=HTTP_404_NOT_FOUND
             )
-        token, _ = Token.objects.get_or_create(user=user)
-        return Response(
-            {
-                'token': token.key
-            },
-            status=HTTP_200_OK
-        )
+
+        return Response(gen_token_response(user), status=HTTP_200_OK)
+        
 
     def logout(self, request):
         request.user.auth_token.delete()
@@ -209,6 +220,18 @@ class EventView(ModelViewSet):
         },
         status=HTTP_200_OK)
 
+    def comments_list(self, requests, pk=None):
+        event = self.get_object()
+        comments = event.comments.all().order_by('created_at')
+        
+        page = self.paginate_queryset(comments)
+        if page is not None:
+            serializer = serializers.SimpleCommentSerializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        serializer = serializers.SimpleCommentSerializer(queryset, many=True)
+
+        return Response(serializer.data)
+
     def like(self, request, pk=None):
         event = self.get_object()
         user = request.user
@@ -234,6 +257,18 @@ class EventView(ModelViewSet):
                 },
                 status=HTTP_200_OK)
 
+    def likes_list(self, requests, pk=None):
+        event = self.get_object()
+        likes = event.likes.all().order_by('created_at')
+        
+        page = self.paginate_queryset(likes)
+        if page is not None:
+            serializer = serializers.SimpleLikeSerializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        serializer = serializers.SimpleLikeSerializer(queryset, many=True)
+
+        return Response(serializer.data)
+
     def participate(self, request, pk=None):
         event = self.get_object()
         user = request.user
@@ -249,15 +284,36 @@ class EventView(ModelViewSet):
             },
             status=HTTP_200_OK)
         except models.Participate.DoesNotExist as identifier:
+            # find conflict events
+            query1 = Q(event__start__lte=event.start) & Q(event__end__gte=event.start)
+            query2 = Q(event__start__lte=event.end) & Q(event__end__gte=event.end)
+            participants_list = user.events_participated.all().values_list("event", flat=True)
+            conflict_events = models.Event.objects.filter(id__in=participants_list).order_by('start')
+            serializer_conflict_event = serializers.EventConflictSerializer(conflict_events, many=True).data
+            
+            # update participations
             participate = models.Participate(user = user, event=event)
             participate.save()
             return Response(
             {
                 'action': 'participate',
                 'event': event.id,
-                'user': user.id
+                'user': user.id,
+                'conflict_event': serializer_conflict_event
             },
             status=HTTP_200_OK)
+
+    def participants_list(self, requests, pk=None):
+        event = self.get_object()
+        participants = event.participants.all().order_by('created_at')
+        
+        page = self.paginate_queryset(participants)
+        if page is not None:
+            serializer = serializers.SimpleParticipateSerializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        serializer = serializers.SimpleParticipateSerializer(queryset, many=True)
+
+        return Response(serializer.data)
 
 class CommentView(ModelViewSet):
     serializer_class = serializers.CommentSerializer
@@ -295,7 +351,6 @@ class CategoryView(ModelViewSet):
 
 class SearchView(ModelViewSet):
     serializer_class = serializers.SimpleEventSerializer
-    queryset = models.Event.objects.all()
     permission_classes = [IsAuthenticated]
     pagination_class = PageNumberPagination
     def search(self, request):
@@ -322,21 +377,38 @@ class SearchView(ModelViewSet):
             event = event.filter(categories__name__in=categories)
 
         # continue search by date ranges
-        if request.data.__contains__('start'):
-            event = event.filter(start__gte=request.data.get('start'))
-        if request.data.__contains__('end'):
-            event = event.filter(end__lte=request.data.get('end'))
+        # /////[///     ]
+        query1 = Q(start__lte=request.data.get('start')) & Q(end__gte=request.data.get('start'))
+        #      [    ////]/////
+        query2 = Q(start__lte=request.data.get('end')) & Q(end__gte=request.data.get('end'))     
+        #      [  ////  ]
+        query3 = Q(start__gte=request.data.get('start')) & Q(end__lte=request.data.get('end'))   
+        if request.data.__contains__('start') and request.data.__contains__('end'):
+            start_time = datetime_parse(request.data.get('start'))
+            end_time = datetime_parse(request.data.get('end'))
+            if start_time >= end_time:
+                return Response({
+                    'detail': 'Invalid datetime range.'
+                },
+                status=HTTP_400_BAD_REQUEST)
+            event = event.filter(query1 | query2 | query3)
+        elif request.data.__contains__('start'):
+            event = event.filter(query1)
+        elif request.data.__contains__('end'):
+            event = event.filter(query2)
 
         # sorting
-        event = event.order_by('start')
+        event = event.order_by('created_at')
 
         # paging result
         page = self.paginate_queryset(event)
         if page is not None:
             serializer = self.get_serializer(page, many=True)
+            print("DEBUG: ", type(serializer.data))
             return self.get_paginated_response(serializer.data)
         serializer = self.get_serializer(queryset, many=True)
 
+        
         # return response
         return Response(serializer.data)
 
@@ -346,7 +418,7 @@ class GoogleSignInView(ModelViewSet):
     #step 01: send auth request to google server
     def auth(self, request):
         google_oauth_server = f"https://accounts.google.com/o/oauth2/v2/auth?client_id={settings.SOCIAL_GOOGLE_CLIENT_ID}"
-        google_oauth_server += "&redirect_uri=http://127.0.0.1:8000/api/auth/callback"
+        google_oauth_server += f"&redirect_uri={settings.SOCIAL_GOOGLE_REDIRECT_URI}"
         google_oauth_server += "&scope=profile email openid&access_type=offline&prompt=consent"
         google_oauth_server += "&response_type=code&include_granted_scopes=true"
         return Response(headers={'Location': google_oauth_server},status=HTTP_302_FOUND)
@@ -358,7 +430,7 @@ class GoogleSignInView(ModelViewSet):
             'client_id': settings.SOCIAL_GOOGLE_CLIENT_ID,
             'client_secret': settings.SOCIAL_GOOGLE_CLIENT_SECRET,
             'grant_type': 'authorization_code',
-            'redirect_uri': 'http://127.0.0.1:8000/api/auth/callback',
+            'redirect_uri': settings.SOCIAL_GOOGLE_REDIRECT_URI,
         }
 
         google_token_server = "https://www.googleapis.com/oauth2/v4/token"
@@ -383,13 +455,11 @@ class GoogleSignInView(ModelViewSet):
             user = models.User.objects.get(email=response['email'])
             token, _ = Token.objects.get_or_create(user=user)
             return Response(
-                {
-                    'token': token.key
-                },
+                gen_token_response(user),
                 status=HTTP_200_OK
             )
         except models.User.DoesNotExist:
-            return Response(data={'error': 'user not found'}, status=HTTP_404_NOT_FOUND)
+            return Response(data={'detail': 'user not found'}, status=HTTP_404_NOT_FOUND)
 
 
             

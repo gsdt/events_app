@@ -8,4 +8,9 @@ e = Event(title='Big event', description='this is big description', location='Lo
 e2 = Event(title='Big event', description='this is big description', location='Lotte', start=timezone.now(), end=timezone.now()+datetime.timedelta(days=
 
 
-https://accounts.google.com/signin/oauth/oauthchooseaccount?client_id=741430515032-cgjpg3m6tpn9c4s669efln9ejpm0tkht.apps.googleusercontent.com&as=cL2n02d9YRFQ8-tRSlsRig&destination=http%3A%2F%2F127.0.0.1%3A8000&approval_state=!ChQzMEU5RVpYX0pBczI2NjlBOFFaXxIfVXl3QndIc2h4MUlaOEhuU1JuY2dubXBlSURSOXN4WQ%E2%88%99AJDr988AAAAAXP0teNyHP8i2BcqlgWQkeJcqosdLpGGj&oauthgdpr=1&xsrfsig=ChkAeAh8T5cYu9hGf-QAXVzieVybknxSLmLjEg5hcHByb3ZhbF9zdGF0ZRILZGVzdGluYXRpb24SBXNvYWN1Eg9vYXV0aHJpc2t5c2NvcGU&flowName=GeneralOAuthFlow
+http://127.0.0.1:8000/api/auth/callback?
+code=4%2FZQHLR9xen2b5IF9qcKjvOaoxWIWWQKKfdVf0B6pllRzyfuaghJdEDffxw7fRzt0XDHngUQBa8BHj4s9EvKiCrXc
+&scope=email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+openid
+&authuser=0
+&session_state=7f1e52dfc82189f80f159ad1b18bfea8a9b83f27..9446
+&prompt=consent
