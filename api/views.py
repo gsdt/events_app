@@ -79,6 +79,13 @@ class UserView(ModelViewSet):
         serializer = self.get_serializer(new_user)
         return Response(data=serializer.data ,status=HTTP_201_CREATED)
 
+    def update(self, request):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        instance
+        self.perform_update(serializer)
+        
     def login(self, request):
         username = request.data.get("username")
         password = request.data.get("password")
@@ -137,6 +144,8 @@ class EventView(ModelViewSet):
         return Response(serializer.data)
 
     def create(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
         data = request.data
         new_event = models.Event(
             title = data.get('title', ''),
@@ -145,15 +154,10 @@ class EventView(ModelViewSet):
             start = data.get('start', ''),
             end = data.get('end', '')
         )
-        if new_event.start > new_event.end:
-            return Response(
-                data = {'message': 'Start date must be smaller than end date.'}, 
-                status=HTTP_400_BAD_REQUEST
-            )
         new_event.save()
 
         # now we trying to add relationship with categories
-        categories = [t.strip() for t in request.data.get('categories', '').split(',')]
+        categories = [t.strip() for t in request.data.get('categories', '').split(',') if t.strip() != '']
         for cate_name in categories:
             category = models.Category.objects.filter(name=cate_name)
             if category.count() == 0:
@@ -190,7 +194,6 @@ class EventView(ModelViewSet):
             image = models.Image(event=event)
             image.image.save(f'{uuid.uuid4()}{file_extension}', request.FILES[file])
             image.save()
-            print('DEBUG', image.image.url)
 
         return Response({'message': 'Added new image'}, status=HTTP_200_OK)
 
@@ -350,14 +353,22 @@ class CommentView(ModelViewSet):
 
     permission_classes = [permissions.IsOwner]
 
-    # def update(self, request, pk=None):
-    #     comment = self.get_object()
-    #     content = request.data.get('content')
-    #     comment.content = content
-    #     comment.save()
+    def update(self, request, pk=None):
+        comment = self.get_object()
+        content = request.data.get('content', '')
+        if content.strip() == '':
+            return Response(
+                {
+                    'detail': 'content must not be empty'
+                },
+                status=HTTP_400_BAD_REQUEST
+            )
+        comment.content = content
+        comment.save()
 
-    #     return Response(
-    #     status=HTTP_200_OK)
+        return Response(
+        data=self.get_serializer(comment).data,
+        status=HTTP_200_OK)
     
 class CategoryView(ModelViewSet):
     serializer_class = serializers.CategorySerializer
@@ -383,23 +394,23 @@ class SearchView(ModelViewSet):
     permission_classes = [IsAuthenticated]
     pagination_class = PageNumberPagination
     def search(self, request):
-        # search by keyword on title, description, location
-        keywords_list = [keyword.strip() for keyword in request.data.get('keywords', '').split(',')]
-        if len(keywords_list) > 0:
-            first_kword = keywords_list[0]
-            query = Q(title__icontains=first_kword) | Q(description__icontains=first_kword)
-            for kword in keywords_list:
-                query.add(
-                    Q(title__icontains=kword) | Q(description__icontains=kword) | Q(location__icontains=kword),
-                    query.connector
-                )
-            event = models.Event.objects.filter(query)
+        if request.data.__contains__('keywords'):
+            keywords = request.data.get('keywords')
+            # keywords = helpers.filter_special_character(keywords)
+            event = models.Event.objects.extra(
+                tables = ['api_event'],
+                where=[
+                    "MATCH (title, description, location) " +
+                    f"AGAINST (%s IN NATURAL LANGUAGE MODE) "
+                ],
+                params = [keywords]
+            )
         else:
             event = models.Event.objects.all()
 
         # continue search by categories
         if request.data.__contains__('categories'):
-            categories = [t.strip() for t in request.data.get('categories').split(',')]
+            categories = [t.strip() for t in request.data.get('categories').split(',') if t.strip() != '']
         else:
             categories = []
         if len(categories) >0:
@@ -425,13 +436,12 @@ class SearchView(ModelViewSet):
             event = event.filter(query2)
 
         # sorting
-        event = event.order_by('created_at')
+        event = event.order_by('start', 'end')
 
         # paging result
         page = self.paginate_queryset(event)
         if page is not None:
             serializer = self.get_serializer(page, many=True)
-            print("DEBUG: ", type(serializer.data))
             return self.get_paginated_response(serializer.data)
         serializer = self.get_serializer(queryset, many=True)
 
