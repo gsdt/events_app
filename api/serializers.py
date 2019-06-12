@@ -5,10 +5,15 @@ from django.core.paginator import Paginator
 from django.conf import settings
 from collections import OrderedDict
 
+class CreateUserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ('id', 'username', 'email', 'password', 'is_staff')
+
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ('id', 'username', 'email', 'is_superuser', 'facebook_id')
+        fields = ('id', 'username', 'email', 'is_staff', 'facebook_id')
 
 class SimpleUserSerializer(serializers.ModelSerializer):
     class Meta:

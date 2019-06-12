@@ -17,6 +17,7 @@ from rest_framework.status import (
     HTTP_400_BAD_REQUEST,
     HTTP_404_NOT_FOUND,
     HTTP_200_OK,
+    HTTP_201_CREATED,
     HTTP_302_FOUND
 )
 from rest_framework.response import Response
@@ -24,7 +25,6 @@ from rest_framework.viewsets import ModelViewSet
 from rest_framework.decorators import action
 from rest_framework import filters
 from rest_framework.pagination import PageNumberPagination
-
 from rest_framework_jwt.settings import api_settings
 
 from api import models
@@ -43,6 +43,8 @@ def gen_token_response(user):
         expired=api_settings.JWT_EXPIRATION_DELTA,
         type=api_settings.JWT_AUTH_HEADER_PREFIX
     )
+
+ 
 
 class UserView(ModelViewSet):
     queryset = models.User.objects.all().order_by('id')
@@ -64,6 +66,18 @@ class UserView(ModelViewSet):
             permission_classes = permission_dict[self.action]
             
         return [permission() for permission in permission_classes]
+
+    def create(self, request):
+        serializer = serializers.CreateUserSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        new_user = models.User.objects.create_user(
+            username = serializer.data.get('username'),
+            password = serializer.data.get('password'),
+            is_staff = serializer.data.get('is_staff'),
+            email = serializer.data.get('email')
+        )
+        serializer = self.get_serializer(new_user)
+        return Response(data=serializer.data ,status=HTTP_201_CREATED)
 
     def login(self, request):
         username = request.data.get("username")
@@ -111,6 +125,17 @@ class EventView(ModelViewSet):
 
         return [permission() for permission in permission_classes]
 
+    def list(self, request):
+        queryset = self.filter_queryset(self.get_queryset())
+
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = serializers.SimpleEventSerializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = serializers.SimpleEventSerializer(queryset, many=True)
+        return Response(serializer.data)
+
     def create(self, request):
         data = request.data
         new_event = models.Event(
@@ -126,6 +151,7 @@ class EventView(ModelViewSet):
                 status=HTTP_400_BAD_REQUEST
             )
         new_event.save()
+
         # now we trying to add relationship with categories
         categories = [t.strip() for t in request.data.get('categories', '').split(',')]
         for cate_name in categories:
@@ -285,9 +311,12 @@ class EventView(ModelViewSet):
             status=HTTP_200_OK)
         except models.Participate.DoesNotExist as identifier:
             # find conflict events
-            query1 = Q(event__start__lte=event.start) & Q(event__end__gte=event.start)
-            query2 = Q(event__start__lte=event.end) & Q(event__end__gte=event.end)
-            participants_list = user.events_participated.all().values_list("event", flat=True)
+            query1 = Q(event__start__lte=event.start) & Q(event__end__gte=event.start)  # /////[///     ]
+            query2 = Q(event__start__lte=event.end)   & Q(event__end__gte=event.end)    #      [    ////]/////    
+            query3 = Q(event__start__gte=event.start) & Q(event__end__lte=event.end)    #      [  ////  ]
+
+
+            participants_list = user.events_participated.filter(query1 | query2 | query3).values_list("event", flat=True)
             conflict_events = models.Event.objects.filter(id__in=participants_list).order_by('start')
             serializer_conflict_event = serializers.EventConflictSerializer(conflict_events, many=True).data
             
@@ -321,14 +350,14 @@ class CommentView(ModelViewSet):
 
     permission_classes = [permissions.IsOwner]
 
-    def update(self, request, pk=None):
-        comment = self.get_object()
-        content = request.data.get('content')
-        comment.content = content
-        comment.save()
+    # def update(self, request, pk=None):
+    #     comment = self.get_object()
+    #     content = request.data.get('content')
+    #     comment.content = content
+    #     comment.save()
 
-        return Response(
-        status=HTTP_200_OK)
+    #     return Response(
+    #     status=HTTP_200_OK)
     
 class CategoryView(ModelViewSet):
     serializer_class = serializers.CategorySerializer
@@ -377,12 +406,10 @@ class SearchView(ModelViewSet):
             event = event.filter(categories__name__in=categories)
 
         # continue search by date ranges
-        # /////[///     ]
-        query1 = Q(start__lte=request.data.get('start')) & Q(end__gte=request.data.get('start'))
-        #      [    ////]/////
-        query2 = Q(start__lte=request.data.get('end')) & Q(end__gte=request.data.get('end'))     
-        #      [  ////  ]
-        query3 = Q(start__gte=request.data.get('start')) & Q(end__lte=request.data.get('end'))   
+        query1 = Q(start__lte=request.data.get('start')) & Q(end__gte=request.data.get('start'))   # /////[///     ]
+        query2 = Q(start__lte=request.data.get('end')) & Q(end__gte=request.data.get('end'))       #      [    ////]/////  
+        query3 = Q(start__gte=request.data.get('start')) & Q(end__lte=request.data.get('end'))     #      [  ////  ]
+
         if request.data.__contains__('start') and request.data.__contains__('end'):
             start_time = datetime_parse(request.data.get('start'))
             end_time = datetime_parse(request.data.get('end'))

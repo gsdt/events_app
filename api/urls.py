@@ -6,7 +6,11 @@ urlpatterns = [
     # user
     path('user/login', views.UserView.as_view({'post': 'login'})),
     path('user/logout', views.UserView.as_view({'get': 'logout'})),
-    path('users', views.UserView.as_view({'get': 'list'})),
+    path('users', views.UserView.as_view(
+        {
+            'get': 'list',
+            'post': 'create'
+        })),
     path('user/<pk>', views.UserView.as_view(
         {
             'get': 'retrieve',
@@ -15,12 +19,9 @@ urlpatterns = [
         })),
 
     # event
-    path('events', views.SearchView.as_view(
-        {
-            'get': 'search'
-        })),
     path('events', views.EventView.as_view(
         {
+            'get': 'list',
             'post': 'create'
         })),
     path('event/<pk>', views.EventView.as_view(
@@ -65,7 +66,7 @@ urlpatterns = [
         }
     )),
     # search
-    path('search', views.SearchView.as_view(
+    path('events/search', views.SearchView.as_view(
         {'get': 'search'}
     )),
 
