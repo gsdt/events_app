@@ -76,5 +76,13 @@ urlpatterns = [
     )),
     path('auth/callback', views.GoogleSignInView.as_view(
         {'get': 'callback'}
-    ))
+    )),
+
+    # notify
+    path('notify/<pk>', views.NotifyView.as_view(
+        {
+            'get': 'ping'
+        }
+    )),
+    path(r'event_detail/<int:event_id>', views.view_event_detail)
 ]

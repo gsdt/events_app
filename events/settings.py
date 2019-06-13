@@ -36,6 +36,7 @@ AUTH_USER_MODEL = 'api.User'
 # Application definition
 
 INSTALLED_APPS = [
+    'channels',
     'rest_framework',
     'rest_framework.authtoken',
     'api.apps.ApiConfig',
@@ -48,6 +49,16 @@ INSTALLED_APPS = [
     'social_django'
 ]
 
+# Channels
+ASGI_APPLICATION = 'events.routing.application'
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            "hosts": [('127.0.0.1', 6379)],
+        },
+    },
+}
 # email
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'

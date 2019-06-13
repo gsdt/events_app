@@ -3,6 +3,13 @@ from django.conf import settings
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
 from django.db.models import Q
+from rest_framework_jwt.settings import api_settings
+
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
+from collections import OrderedDict
+from api import serializers
+
 import threading
 import string
 
@@ -54,3 +61,23 @@ def filter_special_character(input):
         if c in string.ascii_letters + string.digits + ' ':
             output += c
     return output
+
+def gen_token_response(user):
+    jwt_payload_handler = api_settings.JWT_PAYLOAD_HANDLER
+    jwt_encode_handler = api_settings.JWT_ENCODE_HANDLER
+
+    payload = jwt_payload_handler(user)
+    token = jwt_encode_handler(payload)
+    return OrderedDict(
+        user=serializers.UserSerializer(user).data,
+        token=token,
+        expired=api_settings.JWT_EXPIRATION_DELTA,
+        type=api_settings.JWT_AUTH_HEADER_PREFIX
+    )
+
+def send_notifcation(event_id, data):
+    layer = get_channel_layer()
+    async_to_sync(layer.group_send)('group_'+event_id, {
+        'type': 'events.alarm',
+        'content': data
+    })

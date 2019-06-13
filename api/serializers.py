@@ -41,6 +41,25 @@ class EventConflictSerializer(serializers.ModelSerializer):
         model = Event
         fields = ('id', 'title', 'description', 'start', 'end')
 
+class NotifyEventSerializer(serializers.ModelSerializer):
+    likes_count = serializers.SerializerMethodField()
+    comments_count = serializers.SerializerMethodField()
+    participants_count = serializers.SerializerMethodField()
+
+    def get_likes_count(self, obj):
+        return Like.objects.filter(event=obj).count()
+
+    def get_comments_count(self, obj):
+        return Comment.objects.filter(event=obj).count()
+
+    def get_participants_count(self, obj):
+        return Participate.objects.filter(event=obj).count()
+
+    class Meta:
+        model = Event
+        fields = ('id', 'title', 'likes_count', 'comments_count', 'participants_count')
+
+
 class SimpleEventSerializer(serializers.ModelSerializer):
     images = ImageSerializer(many=True, read_only=True)
     likes_count = serializers.SerializerMethodField()

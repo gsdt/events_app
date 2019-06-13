@@ -8,6 +8,7 @@ from collections import OrderedDict
 
 from django.contrib.auth import authenticate
 from django.views.decorators.csrf import csrf_exempt
+from django.shortcuts import get_object_or_404
 from django.db.models import Q
 from django.conf import settings
 from rest_framework.authtoken.models import Token
@@ -18,33 +19,24 @@ from rest_framework.status import (
     HTTP_404_NOT_FOUND,
     HTTP_200_OK,
     HTTP_201_CREATED,
-    HTTP_302_FOUND
+    HTTP_302_FOUND,
+    HTTP_204_NO_CONTENT
 )
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.decorators import action
 from rest_framework import filters
 from rest_framework.pagination import PageNumberPagination
-from rest_framework_jwt.settings import api_settings
+
 
 from api import models
 from api import serializers
 from api import permissions
 
-def gen_token_response(user):
-    jwt_payload_handler = api_settings.JWT_PAYLOAD_HANDLER
-    jwt_encode_handler = api_settings.JWT_ENCODE_HANDLER
-
-    payload = jwt_payload_handler(user)
-    token = jwt_encode_handler(payload)
-    return OrderedDict(
-        user=serializers.UserSerializer(user).data,
-        token=token,
-        expired=api_settings.JWT_EXPIRATION_DELTA,
-        type=api_settings.JWT_AUTH_HEADER_PREFIX
-    )
-
- 
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
+from django.shortcuts import render
+from django.utils.safestring import mark_safe
 
 class UserView(ModelViewSet):
     queryset = models.User.objects.all().order_by('id')
@@ -101,7 +93,7 @@ class UserView(ModelViewSet):
                 status=HTTP_404_NOT_FOUND
             )
 
-        return Response(gen_token_response(user), status=HTTP_200_OK)
+        return Response(helpers.gen_token_response(user), status=HTTP_200_OK)
         
 
     def logout(self, request):
@@ -236,18 +228,32 @@ class EventView(ModelViewSet):
     def comment(self, request, pk=None):
         event = self.get_object()
         user = request.user
-        content = request.data.get("content")
+        content = request.data.get("content").strip()
+
+        if content == '':
+            return Response(
+                {
+                    'detail': 'Empty comment are not allowed.'
+                },
+                status=HTTP_400_BAD_REQUEST
+            )
 
         comment = models.Comment(user = user, event=event, content=content)
         comment.save()
+
+        return_action = OrderedDict(
+            action='comment',
+            content=content,
+            event = serializers.NotifyEventSerializer(event).data,
+            user=serializers.SimpleUserSerializer(user).data
+        )
+
+        helpers.send_notifcation(pk, return_action)
+
         return Response(
-        {
-            'action': 'comment',
-            'event': event.id,
-            'user': user.id,
-            'content': content
-        },
-        status=HTTP_200_OK)
+            return_action,
+            status=HTTP_200_OK
+        )
 
     def comments_list(self, requests, pk=None):
         event = self.get_object()
@@ -264,27 +270,26 @@ class EventView(ModelViewSet):
     def like(self, request, pk=None):
         event = self.get_object()
         user = request.user
-
+        action = 'unlike'
         try:
             like = models.Like.objects.get(user=user, event=event)
             like.delete()
-            return Response(
-                {
-                    'action': 'unlike',
-                    'event': event.id,
-                    'user': user.id
-                },
-                status=HTTP_200_OK)
         except models.Like.DoesNotExist as identifier:
             like = models.Like(user = user, event=event)
             like.save()
-            return Response(
-                {
-                    'action': 'like',
-                    'event': event.id,
-                    'user': user.id
-                },
-                status=HTTP_200_OK)
+            action = 'like'
+
+        return_action = OrderedDict(
+            action=action,
+            event=serializers.NotifyEventSerializer(event).data,
+            user=serializers.SimpleUserSerializer(user).data
+        )
+
+        helpers.send_notifcation(pk, return_action)
+
+        return Response(
+            return_action,
+            status=HTTP_200_OK)
 
     def likes_list(self, requests, pk=None):
         event = self.get_object()
@@ -301,17 +306,11 @@ class EventView(ModelViewSet):
     def participate(self, request, pk=None):
         event = self.get_object()
         user = request.user
-
+        action = 'leave'
+        serializer_conflict_event = []
         try:
             participate = models.Participate.objects.get(user=user, event=event)
             participate.delete()
-            return Response(
-            {
-                'action': 'leave',
-                'event': event.id,
-                'user': user.id
-            },
-            status=HTTP_200_OK)
         except models.Participate.DoesNotExist as identifier:
             # find conflict events
             query1 = Q(event__start__lte=event.start) & Q(event__end__gte=event.start)  # /////[///     ]
@@ -326,13 +325,20 @@ class EventView(ModelViewSet):
             # update participations
             participate = models.Participate(user = user, event=event)
             participate.save()
-            return Response(
-            {
-                'action': 'participate',
-                'event': event.id,
-                'user': user.id,
-                'conflict_event': serializer_conflict_event
-            },
+            action = 'participate'
+
+        return_action = OrderedDict(
+            action=action,
+            event=serializers.NotifyEventSerializer(event).data,
+            user=serializers.SimpleUserSerializer(user).data,
+        )
+
+        helpers.send_notifcation(pk, return_action)
+
+        return_action['conflicts']=serializer_conflict_event
+
+        return Response(
+            return_action,
             status=HTTP_200_OK)
 
     def participants_list(self, requests, pk=None):
@@ -367,8 +373,30 @@ class CommentView(ModelViewSet):
         comment.save()
 
         return Response(
-        data=self.get_serializer(comment).data,
-        status=HTTP_200_OK)
+            data=self.get_serializer(comment).data,
+            status=HTTP_200_OK
+        )
+
+    def destroy(self, request, pk=None):
+        comment = self.get_object()
+        event = comment.event
+        user = comment.user
+        comment_id = comment.id
+        comment.delete()
+
+        return_action = OrderedDict(
+            action='remove comment',
+            event=serializers.NotifyEventSerializer(event).data,
+            user=serializers.SimpleUserSerializer(user).data,
+        )
+
+        helpers.send_notifcation(str(event.id), return_action)
+
+        return Response(
+            return_action,
+            HTTP_204_NO_CONTENT
+        )
+    
     
 class CategoryView(ModelViewSet):
     serializer_class = serializers.CategorySerializer
@@ -492,11 +520,24 @@ class GoogleSignInView(ModelViewSet):
             user = models.User.objects.get(email=response['email'])
             token, _ = Token.objects.get_or_create(user=user)
             return Response(
-                gen_token_response(user),
+                helpers.gen_token_response(user),
                 status=HTTP_200_OK
             )
         except models.User.DoesNotExist:
             return Response(data={'detail': 'user not found'}, status=HTTP_404_NOT_FOUND)
 
+# bellow is view for testing...
 
-            
+class NotifyView(ModelViewSet):
+    def ping(self, request, pk=None):
+        helpers.send_notifcation(pk, {
+            'status': 'ping!'
+        })
+        return Response('Done!', status=HTTP_200_OK)
+
+def view_event_detail(request, room_id):
+    event = get_object_or_404(models.Event, pk=room_id)
+    return render(request, 'room.html', {
+        'event_title': event.title,
+        'room_name_json': mark_safe(json.dumps(room_id))
+    })

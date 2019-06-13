@@ -45,7 +45,6 @@ class Category(CommonInfo):
         return self.name
 
 class User(AbstractUser):
-    facebook_id = models.CharField(max_length=255, blank=True)
     email = models.EmailField(unique=True)
     # class Meta:
         # unique
