@@ -4,9 +4,12 @@ from .models import User, Event, Image, Like, Comment, Participate, Category
 
 class InlineImage(admin.TabularInline):
     model = Image
+class InlineCategory(admin.TabularInline):
+    model = Category.events.through
 class CustomEventAdmin(admin.ModelAdmin):
-    inlines = [InlineImage]
+    inlines = [InlineImage, InlineCategory]
     fields = ('title', 'description', 'location', 'start', 'end')
+
 
 # Register your models here.
 admin.site.register(User, UserAdmin)

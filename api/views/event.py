@@ -136,7 +136,7 @@ class EventView(ModelViewSet):
         old_event = models.Event(start=event.start, end=event.end, location=event.location)
 
         # now we trying to add relationship with categories
-        categories = [t.strip() for t in request.data.get('categories', '').split(',')]
+        categories = [t.strip() for t in request.data.get('categories', '').split(',') if t.strip() != '']
         for cate_name in categories:
             category = models.Category.objects.filter(name=cate_name)
             if category.count() == 0:
