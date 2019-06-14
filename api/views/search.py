@@ -38,8 +38,8 @@ class SearchView(ModelViewSet):
     permission_classes = [IsAuthenticated]
     pagination_class = PageNumberPagination
     def search(self, request):
-        if request.data.__contains__('keywords'):
-            keywords = request.data.get('keywords')
+        if request.GET.__contains__('keywords'):
+            keywords = request.GET.get('keywords')
             # keywords = helpers.filter_special_character(keywords)
             event = models.Event.objects.extra(
                 tables = ['api_event'],
@@ -53,30 +53,30 @@ class SearchView(ModelViewSet):
             event = models.Event.objects.all()
 
         # continue search by categories
-        if request.data.__contains__('categories'):
-            categories = [t.strip() for t in request.data.get('categories').split(',') if t.strip() != '']
+        if request.GET.__contains__('categories'):
+            categories = [t.strip() for t in request.GET.get('categories').split(',') if t.strip() != '']
         else:
             categories = []
         if len(categories) >0:
             event = event.filter(categories__name__in=categories)
 
         # continue search by date ranges
-        query1 = Q(start__lte=request.data.get('start')) & Q(end__gte=request.data.get('start'))   # /////[///     ]
-        query2 = Q(start__lte=request.data.get('end')) & Q(end__gte=request.data.get('end'))       #      [    ////]/////  
-        query3 = Q(start__gte=request.data.get('start')) & Q(end__lte=request.data.get('end'))     #      [  ////  ]
+        query1 = Q(start__lte=request.GET.get('start')) & Q(end__gte=request.GET.get('start'))   # /////[///     ]
+        query2 = Q(start__lte=request.GET.get('end')) & Q(end__gte=request.GET.get('end'))       #      [    ////]/////  
+        query3 = Q(start__gte=request.GET.get('start')) & Q(end__lte=request.GET.get('end'))     #      [  ////  ]
 
-        if request.data.__contains__('start') and request.data.__contains__('end'):
-            start_time = datetime_parse(request.data.get('start'))
-            end_time = datetime_parse(request.data.get('end'))
+        if request.GET.__contains__('start') and request.GET.__contains__('end'):
+            start_time = datetime_parse(request.GET.get('start'))
+            end_time = datetime_parse(request.GET.get('end'))
             if start_time >= end_time:
                 return Response({
                     'detail': 'Invalid datetime range.'
                 },
                 status=HTTP_400_BAD_REQUEST)
             event = event.filter(query1 | query2 | query3)
-        elif request.data.__contains__('start'):
+        elif request.GET.__contains__('start'):
             event = event.filter(query1)
-        elif request.data.__contains__('end'):
+        elif request.GET.__contains__('end'):
             event = event.filter(query2)
 
         # sorting
@@ -91,4 +91,4 @@ class SearchView(ModelViewSet):
 
         
         # return response
-        return Response(serializer.data)
+        return Response(serializer.GET)

@@ -73,11 +73,11 @@ class EventView(ModelViewSet):
         serializer.is_valid(raise_exception=True)
         data = request.data
         new_event = models.Event(
-            title = data.get('title', ''),
-            description = data.get('description', ''),
-            location = data.get('location', ''),
-            start = data.get('start', ''),
-            end = data.get('end', '')
+            title = data.get('title').strip(),
+            description = data.get('description').strip(),
+            location = data.get('location').strip(),
+            start = data.get('start').strip(),
+            end = data.get('end').strip()
         )
         new_event.save()
 

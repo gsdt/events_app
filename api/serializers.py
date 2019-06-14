@@ -92,6 +92,9 @@ class EventSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({'end':'End date must be after start date.'})
         if data.get('title', '').strip() == '':
             raise serializers.ValidationError({'title': 'Event must have a non empty title'})
+        data['title'] = data['title'].strip()
+        data['description'] = data['description'].strip()
+        data['location'] = data['location'].strip()
         return data
 
     def get_likes(self, obj):
