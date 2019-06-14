@@ -27,6 +27,7 @@
         $('#main').append(
             "<pre>"+JSON.stringify(data['content'], null, 4)+"</pre>"
         );
+        $('body,html').animate({scrollTop: document.body.scrollHeight}, 800);
     };
 
     chatSocket.onclose = function(e) {

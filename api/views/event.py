@@ -4,6 +4,7 @@ import operator
 import requests
 import json
 from dateutil.parser import parse as datetime_parse
+from datetime import timedelta
 from collections import OrderedDict
 
 from django.contrib.auth import authenticate
@@ -32,7 +33,9 @@ from rest_framework.pagination import PageNumberPagination
 from api import models
 from api import serializers
 from api import permissions
+from api import tasks
 
+from celery.task.control import revoke
 
 class EventView(ModelViewSet):
     queryset = models.Event.objects.all().order_by('start')
@@ -102,6 +105,13 @@ class EventView(ModelViewSet):
 
         serializer = serializers.EventSerializer(new_event)
 
+        # add notify task
+        new_event = models.Event.objects.get(pk=new_event.id)
+        new_event.task_id = tasks.notify_incomming_event.apply_async(
+            (new_event.id,), 
+            eta=new_event.start + timedelta(hours=-1)).id
+        new_event.save()
+
         return Response(
             serializer.data, 
             status=HTTP_200_OK)
@@ -143,17 +153,29 @@ class EventView(ModelViewSet):
 
         # now we are sending email if location or time range changed.
         try:
+            if old_event.start != event.start:
+                # skip old notify
+                revoke(event.task_id)
+                # update new nofity
+                event.task_id = tasks.notify_incomming_event.apply_async(
+                    (event.id,),
+                    eta=event.start+timedelta(hours=-1)
+                )
+                event.save()
+
             if old_event.start != event.start or old_event.end != event.end or old_event.location != event.location:
-                print("Datetime or location has changed!")
-                participants = models.Participate.objects.filter(event = event)
-                
-                helpers.SendEmailThread(participants, old_event, event, helpers.EVENT_CHANGE).start()
+                tasks.notify_changed_event.delay(event.id)
 
         except expression as identifier:
             print(identifier)
-            pass
 
         return Response(serializer.data, HTTP_200_OK)
+
+    def destroy(self, request, pk=None):
+        event = self.get_object()
+        revoke(event.task_id)
+        event.delete()
+        return Response(status=HTTP_204_NO_CONTENT)
 
     def comment(self, request, pk=None):
         event = self.get_object()
