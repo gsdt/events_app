@@ -17,6 +17,8 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MEDIA_URL = '/uploads/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'uploads')
 
+SERVER_DOMAIN = "127.0.0.1"
+SERVER_PORT = 8000
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/2.2/howto/deployment/checklist/
@@ -62,15 +64,16 @@ AUTHENTICATION_BACKENDS = (
     'social_core.backends.google.GooglePlusAuth',
     'django.contrib.auth.backends.ModelBackend',
 )
-
-SOCIAL_AUTH_URL_NAMESPACE = 'social'
-
-SOCIAL_AUTH_GOOGLE_PLUS_KEY = '741430515032-cgjpg3m6tpn9c4s669efln9ejpm0tkht.apps.googleusercontent.com' 
-SOCIAL_AUTH_GOOGLE_PLUS_SECRET = '4ZOhYFegJT3QUu_x_sS3HiVE'
+SOCIAL_GOOGLE_CLIENT_ID = '8067500024-51j7i0g86njqijp8h9viftkm63rjrtl9.apps.googleusercontent.com' 
+SOCIAL_GOOGLE_CLIENT_SECRET = 'jNIuBKlfVZIa3mBrAMwZu3f0'
+SOCIAL_GOOGLE_REDIRECT_URI = "http://127.0.0.1:8000/api/auth/callback"
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework.authentication.TokenAuthentication',
+        # 'rest_framework.authentication.TokenAuthentication',
+        'rest_framework_jwt.authentication.JSONWebTokenAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+        'rest_framework.authentication.BasicAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated', ),
