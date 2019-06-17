@@ -4,6 +4,7 @@ from django.template.loader import render_to_string
 from django.utils.html import strip_tags
 from django.db.models import Q
 import threading
+import string
 
 valid_file_extension = [".jpg", ".jpeg", ".png", ".gif", ".tiff"]
 
@@ -47,23 +48,9 @@ class SendEmailThread(threading.Thread):
 
         print("Done send email jobs!")
 
-def query_overlap(start, end):
-    # /////[///     ]
-    query1 = Q(start__lte=start) & Q(end__gte=start)
-    #      [    ////]/////
-    query2 = Q(start__lte=end) & Q(end__gte=end)     
-    #      [  ////  ]
-    query3 = Q(start__gte=start) & Q(end__lte=end)  
-
-class QueryOverlap:
-    def __init__(self, start, end):
-        self.start = start
-        self.end = end
-    def get_overlap_start(self):
-        return Q(start__lte=self.start) & Q(end__gte=self.start)  # /////[///     ]
-
-    def get_overlap_end(self):
-        return Q(start__lte=self.end) & Q(end__gte=self.end)      #      [    ////]/////
-
-    def get_overlap_middle(self):
-        return Q(start__gte=self.start) & Q(end__lte=self.end)    #      [  ////  ]
+def filter_special_character(input):
+    output = ''
+    for c in input:
+        if c in string.ascii_letters + string.digits + ' ':
+            output += c
+    return output
